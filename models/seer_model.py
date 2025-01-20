@@ -165,7 +165,9 @@ class SeerAgent(nn.Module):
         self.gripper_state_encoder = nn.Linear(2, GRIPPER_STATE_FEATURE_DIM)
         self.state_projector = nn.Linear(ARM_STATE_FEATURE_DIM + GRIPPER_STATE_FEATURE_DIM, self.hidden_dim)
 
-        # action encoder
+        # action encoder  not used
+        
+        # use state as encode input, and decode action as output
         self.action_pose_encoder = nn.Linear(6, ARM_STATE_FEATURE_DIM)
         self.action_gripper_position_encoder = nn.Linear(2, GRIPPER_STATE_FEATURE_DIM)
         self.action_projector = nn.Linear(ARM_STATE_FEATURE_DIM + GRIPPER_STATE_FEATURE_DIM, self.hidden_dim)
