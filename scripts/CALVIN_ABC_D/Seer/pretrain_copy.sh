@@ -31,10 +31,10 @@ torchrun --nnodes=${node} --nproc_per_node=${node_num} --master_port=10211 train
     --save_checkpoint_path ${save_checkpoint_path} \
     --transformer_layers 24 \
     --phase "pretrain" \
-    --action_pred_steps 3 \
-    --sequence_length 14 \
-    --future_steps 3 \
-    --window_size 17 \
+    --action_pred_steps 2 \
+    --sequence_length 10 \
+    --future_steps 1 \
+    --window_size 16 \
     --obs_pred \
     --loss_image \
     --loss_action \
@@ -43,4 +43,3 @@ torchrun --nnodes=${node} --nproc_per_node=${node_num} --master_port=10211 train
     --atten_only_obs \
     --except_lang \
     --save_checkpoint \
-    --report_to_wandb \

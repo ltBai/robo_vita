@@ -93,15 +93,23 @@ def train_one_epoch_calvin(
     for num_steps, batch_calvin in t:
         data_time_m.update(time.time() - end)
         global_step = num_steps + epoch * num_batches_per_epoch
-
-        # images
-        images_primary = batch_calvin[0].to(device_id, dtype=cast_dtype, non_blocking=True)
-        images_wrist = batch_calvin[3].to(device_id, dtype=cast_dtype, non_blocking=True)
-        # text tokens
-        text_tokens = batch_calvin[1].to(device_id, non_blocking=True).unsqueeze(1).repeat(1, args.window_size, 1)
         
-        # states
+        # images, 0和3分别是两张图
+        
+        images_primary = batch_calvin[0].to(device_id, dtype=cast_dtype, non_blocking=True)
+        print("images_primary.shape", images_primary.shape)
+        
+        images_wrist = batch_calvin[3].to(device_id, dtype=cast_dtype, non_blocking=True)
+        
+        # text tokens, 1是对应的文本
+        text_tokens = batch_calvin[1].to(device_id, non_blocking=True).unsqueeze(1).repeat(1, args.window_size, 1)
+        print("text_tokens.shape", text_tokens.shape)
+        
+        
+        # states, 4是对应的状态
         states = batch_calvin[4].to(device_id, dtype=cast_dtype, non_blocking=True)
+        print("states.shape", states.shape)
+    
         if args.gripper_width:
             input_states = torch.cat([states[..., :6], states[..., -2:]], dim=-1)
         else:
@@ -111,8 +119,9 @@ def train_one_epoch_calvin(
         # self_key_point
         self_keypoints = None
         
-        # actions
+        # actions, 2是对应的动作
         actions = batch_calvin[2].to(device_id, dtype=cast_dtype, non_blocking=True)
+        print("action.shape", actions.shape)
         # label. [:6] is the joint position and [6:] is the gripper control, which is -1, 1, thus we need to convert it to 0, 1
         actions[..., 6:] = (actions[..., 6:] + 1) // 2
         input_image_primary = images_primary[:, :args.sequence_length, :]
@@ -120,9 +129,14 @@ def train_one_epoch_calvin(
         input_text_token = text_tokens[:, :args.sequence_length, :]
         input_state = input_states[:, :args.sequence_length, :]
 
+        print([args.sequence_length-args.atten_goal+j for j in range(args.action_pred_steps)] )
+        
+        # 具身领域的state是当前状态，action是基于当前状态的下一个动作，所以根据第一个state去预测第一个action，在loss函数里面直接取seq_0作为第一个动作的label，
         # label action
+        # 模型预测obs的时候，其实预测的是future_steps以后的image，而且需要观测到future_steps+1以后的state
         label_actions = torch.cat([actions[:, j:args.sequence_length-args.atten_goal+j, :].unsqueeze(-2) for j in range(args.action_pred_steps)], dim=-2) 
 
+        print(input_image_primary.shape)
         with autocast():  # image_primary, image_wrist, state, language_instruction
             arm_pred_action, gripper_pred_action, image_pred, arm_pred_state, gripper_pred_state, loss_arm_action = model(
                 image_primary=input_image_primary,
@@ -133,6 +147,7 @@ def train_one_epoch_calvin(
             )
         # loss_action
         if args.loss_action and args.action_pred_steps:
+            print(arm_pred_action[:, :args.sequence_length-args.atten_goal].shape, label_actions[:, :args.sequence_length-args.atten_goal, :, :6].shape, "^^^^^^^^^^^^^^^")
             loss_arm_action = torch.nn.functional.smooth_l1_loss(
                             arm_pred_action[:, :args.sequence_length-args.atten_goal], 
                             label_actions[:, :args.sequence_length-args.atten_goal, :, :6].detach())

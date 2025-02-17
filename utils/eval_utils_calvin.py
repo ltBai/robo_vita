@@ -8,11 +8,11 @@ import PIL.Image as Image
 import copy
 from collections import deque
 from moviepy.editor import ImageSequenceClip
-from calvin_agent.models.calvin_base_model import CalvinBaseModel
+from  calvin.calvin_models.calvin_agent.models.calvin_base_model import CalvinBaseModel
 import time
 sys.path.insert(0, Path(__file__).absolute().parents[2].as_posix())
-from calvin_agent.evaluation.multistep_sequences import get_sequences
-from calvin_agent.evaluation.utils import (
+from calvin.calvin_models.calvin_agent.evaluation.multistep_sequences import get_sequences
+from calvin.calvin_models.calvin_agent.evaluation.utils import (
     collect_plan,
     count_success,
     create_tsne,
@@ -26,7 +26,7 @@ from omegaconf import OmegaConf
 from termcolor import colored
 import torch
 from tqdm.auto import tqdm
-from calvin_env.envs.play_table_env import get_env
+from calvin.calvin_env.calvin_env.envs.play_table_env import get_env
 from utils.data_utils import preprocess_image, preprocess_text_calvin
 import functools
 from utils.train_utils import get_cast_dtype
@@ -163,6 +163,9 @@ def evaluate_policy_ddp(model, env, epoch, calvin_conf_path, eval_log_dir=None, 
         val_annotations = OmegaConf.load(conf_dir / "annotations/new_playtable_validation.yaml")
 
     eval_log_dir = get_log_dir(eval_log_dir)
+    
+    # 包含了环境的初始状态，和对应的5个task
+    
     with open('./utils/eval_sequences.json', 'r') as f:
         eval_sequences = json.load(f)
     device_num = int(torch.distributed.get_world_size())
@@ -178,8 +181,11 @@ def evaluate_policy_ddp(model, env, epoch, calvin_conf_path, eval_log_dir=None, 
     if not debug:
         eval_sequences = tqdm(eval_sequences, position=0, leave=True)
 
+    # print(len(eval_sequences))   1000，只取前1000个
     for initial_state, eval_sequence in eval_sequences:
+        # 一个初始状态和对应的5个task
         result = evaluate_sequence(env, model, task_oracle, initial_state, eval_sequence, val_annotations, plans, debug, eval_log_dir, base_sequence_i+local_sequence_i, reset=reset, diverse_inst=diverse_inst)
+        
         results.append(result)
         eval_sequences.set_description(
             " ".join([f"{i + 1}/5 : {v * 100:.1f}% |" for i, v in enumerate(count_success(results))]) + "|"
@@ -219,7 +225,10 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence, va
     env.reset(robot_obs=robot_obs, scene_obs=scene_obs)
     success_counter = 0
 
+    # print(eval_sequence, '****************') 5个task
     for subtask_i, subtask in enumerate(eval_sequence):
+        
+        # 取其中的一个task，给出对应的envs，env设置好了初始状态
         if reset:
             success = rollout(env, model, task_checker, subtask, val_annotations, plans, debug, eval_log_dir, subtask_i, sequence_i, diverse_inst=diverse_inst, robot_obs=robot_obs, scene_obs=scene_obs)
         else:
@@ -229,6 +238,31 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence, va
         else:
             return success_counter
     return success_counter
+
+def print_keys(d, indent=0):
+    """
+    递归打印字典中的所有键，如果值也是字典，则继续打印其键。
+    
+    :param d: 要遍历的字典
+    :param indent: 用于缩进的空格数
+    """
+    if not isinstance(d, dict):
+        return  # 如果不是字典，直接返回
+
+    for key in d.keys():
+        print(' ' * indent + str(key))  # 打印当前键
+        if isinstance(d[key], dict):  # 如果值是字典，递归调用
+            print_keys(d[key], indent + 4)  # 增加缩进
+
+from .visualize_eval_seq import generate_single_seq_gif, plot_and_save_gifs
+
+def as_gif(sequences, path, lang):
+    # Render the images as the gif (15Hz control frequency):
+    imgs = generate_single_seq_gif(sequences, lang)
+    plot_and_save_gifs(imgs, path)
+    print('video has been saved in {}'.format(path))
+
+
 
 def rollout(env, model, task_oracle, subtask, val_annotations, plans, debug, eval_log_dir='', subtask_i=-1, sequence_i=-1, robot_obs=None, scene_obs=None, diverse_inst=False):
     """
@@ -249,7 +283,10 @@ def rollout(env, model, task_oracle, subtask, val_annotations, plans, debug, eva
     model.reset()
     start_info = env.get_info()
 
+    
+    sequences = []
     for step in range(EP_LEN):
+        print(step)
         action = model.step(obs, lang_annotation, step)
         if len(planned_actions) == 0:
             if action.shape == (7,):
@@ -258,12 +295,17 @@ def rollout(env, model, task_oracle, subtask, val_annotations, plans, debug, eva
                 planned_actions.extend([action[i] for i in range(action.shape[0])])
         action = planned_actions.pop(0)
         obs, _, _, current_info = env.step(action)
+        sequences.append(obs["rgb_obs"]["rgb_static"])
         if step == 0:
             collect_plan(model, plans, subtask)
         # check if current step solves a task
         current_task_info = task_oracle.get_task_info_for_set(start_info, current_info, {subtask})
         if len(current_task_info) > 0:
+            as_gif(sequences=sequences, path=f"/data/workspace/codes/robo_vita/{lang_annotation}.mp4", lang=lang_annotation)
             return True
+        
+    
+    as_gif(sequences=sequences, path=f"/data/workspace/codes/robo_vita/{lang_annotation}.mp4", lang=lang_annotation)
 
     return False
 

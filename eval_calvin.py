@@ -23,6 +23,8 @@ def random_seed(seed=42, rank=0):
 def main():
     parser = get_parser(is_eval=True)
     args = parser.parse_args()
+    print(args)
+    
     if args.save_checkpoints_to_wandb and args.save_checkpoint and not args.report_to_wandb:
         raise ValueError("save_checkpoints_to_wandb requires report_to_wandb")
     if args.offline:
@@ -89,7 +91,21 @@ def main():
         checkpoint = torch.load(args.resume_from_checkpoint, map_location="cpu")
         ddp_model.load_state_dict(checkpoint["model_state_dict"], False)
     ddp_model.eval()
+    
+    # 参数检查
+    
+    # print(checkpoint["model_state_dict"]['module.action_pred_token'].shape)
+    # for param, name in ddp_model.named_parameters():
+    #     # print("".format(param.name))
+    #     # if 'vision_encoder.decoder_blocks.7.mlp' in param:
+    #     #     print("", param)
+    #     #     print(name)
+    #     if 'image_decoder.0.attn.proj.bias' in param:
+    #         print("", param)
+    #         print(name)
+        
     eval_log_dir = 'evaluate'
+    
     if args.finetune_type == "calvin":
         eval_one_epoch_calvin_ddp(
             args=args,

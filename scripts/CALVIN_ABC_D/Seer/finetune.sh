@@ -1,13 +1,20 @@
+# #!/bin/bash
+# ### NEED TO CHANGE ###
+# calvin_dataset_path="calvin/dataset/task_ABC_D"
+# save_checkpoint_path="checkpoints/"
+# finetune_from_pretrained_ckpt="checkpoints/pretrain_calvin_abc_d/4.pth"
+# vit_checkpoint_path="checkpoints/vit_mae/mae_pretrain_vit_base.pth" # downloaded from https://drive.google.com/file/d/1bSsvRI4mDM3Gg51C6xO0l9CbojYw3OEt/view?usp=sharing
+# ### NEED TO CHANGE ###
+
 #!/bin/bash
 ### NEED TO CHANGE ###
-calvin_dataset_path="calvin/dataset/task_ABC_D"
-save_checkpoint_path="checkpoints/"
-finetune_from_pretrained_ckpt="checkpoints/pretrain_calvin_abc_d/4.pth"
-vit_checkpoint_path="checkpoints/vit_mae/mae_pretrain_vit_base.pth" # downloaded from https://drive.google.com/file/d/1bSsvRI4mDM3Gg51C6xO0l9CbojYw3OEt/view?usp=sharing
+calvin_dataset_path="./calvin/dataset/calvin_debug_dataset"
+save_checkpoint_path="./checkpoints/"
+vit_checkpoint_path="./checkpoints/vit_mae/mae_pretrain_vit_base.pth" # downloaded from https://drive.google.com/file/d/1bSsvRI4mDM3Gg51C6xO0l9CbojYw3OEt/view?usp=sharing
 ### NEED TO CHANGE ###
 
-node=4
-node_num=8
+node=1
+node_num=1
 torchrun --nnodes=${node} --nproc_per_node=${node_num} --master_port=10211 train.py \
     --traj_cons \
     --rgb_pad 10 \

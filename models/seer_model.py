@@ -27,6 +27,7 @@ def generate_attention_mask(K, num_A, num_B, atten_goal, atten_goal_state,
     # num_B: self.NUM_OBS_TOKEN+self.action_pred_steps
     # num_B: obs_tokens(if exists), action_pred_token, state_pred_token (if exists)
     sequence_length = (num_A + num_B) * K
+    # print('sequence_length', sequence_length)
     attention_mask = torch.zeros((sequence_length, sequence_length))
     for i in range(K):
         start_index = i * (num_A + num_B)
@@ -154,6 +155,8 @@ class SeerAgent(nn.Module):
         assert self.phase in ["pretrain", "finetune", "evaluate"]
         self.gripper_width = gripper_width
         self.vit_checkpoint_path = vit_checkpoint_path
+        
+        # print(self.action_pred_steps, "self.action_pred_steps")
 
         # text projector
         self.text_projector = nn.Linear(512, self.hidden_dim)        
@@ -333,6 +336,7 @@ class SeerAgent(nn.Module):
                             action_pred_steps=self.action_pred_steps).to(self.device), 
                             requires_grad=False)
         B, S, _ = state.shape
+        # print(state.shape)
         device = image_primary.device
         S_AND_FUTURE = image_primary.shape[1]
         image_pred = None
@@ -342,10 +346,14 @@ class SeerAgent(nn.Module):
         
         # text embedding
         with torch.no_grad():
+            # print('text_token', text_token)
             text_feature = self.clip_model.encode_text(text_token.flatten(0, 1))
+            # print('text_feature',text_feature.shape )
             text_feature = text_feature.type(state.type())
         text_embedding = self.text_projector(text_feature)
-        text_embedding = text_embedding.view(B, S, -1, self.hidden_dim) 
+        # print('text_embedding',text_embedding.shape )
+        text_embedding = text_embedding.view(B, S, -1, self.hidden_dim)
+        # print('text_embedding.shape', text_embedding.shape) 
 
         # state embedding
         state = state.flatten(0, 1)
@@ -390,6 +398,7 @@ class SeerAgent(nn.Module):
         # aggregate embeddings and add timestep position encoding
         embeddings = torch.cat((text_embedding, state_embedding, image_embedding, image_cls_token_embedding), dim=2)
         pred_token_start_idx = embeddings.shape[2]
+        # print(embeddings.shape, '8888888')
         transformer_input_list = [embeddings]
         if self.obs_pred:
             transformer_input_list.append(self.obs_tokens.repeat(B, S, 1, 1))
@@ -404,7 +413,10 @@ class SeerAgent(nn.Module):
             transformer_input = transformer_input.type(self.transformer_backbone_type)
         transformer_input = self.embedding_layer_norm(transformer_input)
         transformer_output = self.transformer_backbone(inputs_embeds=transformer_input, attention_mask=self.attention_mask)
+        # print(transformer_output.shape, '999999999')
         transformer_output = transformer_output.view(B, S, -1, self.hidden_dim)
+        # print(transformer_output.shape, '999999999')
+        
 
         if self.obs_pred:
             obs_pred_feature = transformer_output[:, :, pred_token_start_idx : pred_token_start_idx+self.NUM_OBS_TOKEN, :]
@@ -426,7 +438,9 @@ class SeerAgent(nn.Module):
                 this_num_obs_token = 0
             action_pred_feature = transformer_output[:, :, pred_token_start_idx+this_num_obs_token:pred_token_start_idx+this_num_obs_token+self.action_pred_steps, :]
             action_pred_feature = self.action_decoder(action_pred_feature)
+            # print(action_pred_feature.shape, "action_pred_feature.shape")
             arm_pred_action = self.arm_action_decoder(action_pred_feature)
+            # print(arm_pred_action.shape, "arm_pred_action.shape")
             gripper_pred_action = self.gripper_action_decoder(action_pred_feature)
         
         return arm_pred_action, gripper_pred_action, image_pred, arm_pred_state, gripper_pred_state, loss_arm_action
